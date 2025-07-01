@@ -7,10 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { useTheme } from 'next-themes';
 import { normalRandom, choleskyDecomposition, multiplyMatrixVector, calculateCorrelation, calculateVaR, calculateCVaR, calculateMaxDrawdown, calculateSharpeRatio } from '@/utils/mathUtils';
 import { gaussianCopula, studentTCopula, claytonCopula, gumbelCopula } from '@/utils/copulaUtils';
+import { StockData, fetchHistoricalData, calculateReturns } from '@/utils/yahooFinanceUtils';
 import RiskMetricsDashboard from './RiskMetricsDashboard';
 import PortfolioConfiguration from './PortfolioConfiguration';
 import VisualizationCharts from './VisualizationCharts';
 import DiagnosticsPanel from './DiagnosticsPanel';
+import AssetSelector from './AssetSelector';
 
 interface RiskResults {
   historical: {
@@ -31,86 +33,111 @@ interface RiskResults {
 
 const CopulaPortfolioRiskTool = () => {
   const { theme, setTheme } = useTheme();
+  const [selectedAssets, setSelectedAssets] = useState<StockData[]>([]);
   const [portfolioData, setPortfolioData] = useState([]);
   const [returns, setReturns] = useState([]);
-  const [weights, setWeights] = useState([0.4, 0.3, 0.2, 0.1]);
+  const [weights, setWeights] = useState<number[]>([]);
   const [selectedCopula, setSelectedCopula] = useState('gaussian');
   const [confidenceLevel, setConfidenceLevel] = useState([95]);
   const [timeHorizon, setTimeHorizon] = useState([1]);
   const [results, setResults] = useState<RiskResults | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
-  // Generate synthetic market data for demonstration
+  // Load historical data when assets change
   useEffect(() => {
-    generateSyntheticData();
-  }, []);
+    if (selectedAssets.length > 0) {
+      loadHistoricalData();
+    }
+  }, [selectedAssets]);
 
-  const generateSyntheticData = () => {
-    const n = 252; // One year of daily data
-    const correlationMatrix = [
-      [1.0, 0.7, 0.2, 0.3],
-      [0.7, 1.0, 0.1, 0.4],
-      [0.2, 0.1, 1.0, -0.2],
-      [0.3, 0.4, -0.2, 1.0]
-    ];
+  const loadHistoricalData = async () => {
+    if (selectedAssets.length === 0) return;
     
-    // Generate correlated returns using Cholesky decomposition
-    const L = choleskyDecomposition(correlationMatrix);
-    const data = [];
-    const returnsData = [];
-    
-    for (let t = 0; t < n; t++) {
-      const independentNormals = Array(4).fill(0).map(() => normalRandom());
-      const correlatedReturns = multiplyMatrixVector(L, independentNormals);
+    setIsLoadingData(true);
+    try {
+      console.log('Loading historical data for assets:', selectedAssets.map(a => a.symbol));
       
-      const dayData = {
-        date: new Date(2023, 0, 1 + t).toISOString().split('T')[0],
-        'Stock A': 100 * Math.exp(correlatedReturns[0] * 0.02),
-        'Stock B': 100 * Math.exp(correlatedReturns[1] * 0.025),
-        'Bond C': 100 * Math.exp(correlatedReturns[2] * 0.01),
-        'Commodity D': 100 * Math.exp(correlatedReturns[3] * 0.03)
-      };
+      // Fetch historical data for all selected assets
+      const historicalPromises = selectedAssets.map(asset => 
+        fetchHistoricalData(asset.symbol, '1y')
+      );
       
-      data.push(dayData);
+      const historicalDataArrays = await Promise.all(historicalPromises);
       
-      if (t > 0) {
-        const dayReturns = {
-          date: dayData.date,
-          'Stock A': Math.log(dayData['Stock A'] / data[t-1]['Stock A']),
-          'Stock B': Math.log(dayData['Stock B'] / data[t-1]['Stock B']),
-          'Bond C': Math.log(dayData['Bond C'] / data[t-1]['Bond C']),
-          'Commodity D': Math.log(dayData['Commodity D'] / data[t-1]['Commodity D'])
-        };
+      // Find common dates across all assets
+      const commonDates = historicalDataArrays.reduce((dates, data) => {
+        const assetDates = new Set(data.map(d => d.date));
+        return dates.filter(date => assetDates.has(date));
+      }, historicalDataArrays[0]?.map(d => d.date) || []);
+      
+      // Build portfolio data with common dates
+      const portfolioData = commonDates.map(date => {
+        const dayData: any = { date };
+        selectedAssets.forEach((asset, idx) => {
+          const assetData = historicalDataArrays[idx].find(d => d.date === date);
+          dayData[asset.symbol] = assetData?.close || 0;
+        });
+        return dayData;
+      }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Calculate returns
+      const returnsData = [];
+      for (let i = 1; i < portfolioData.length; i++) {
+        const dayReturns: any = { date: portfolioData[i].date };
+        selectedAssets.forEach(asset => {
+          const prevPrice = portfolioData[i - 1][asset.symbol];
+          const currentPrice = portfolioData[i][asset.symbol];
+          if (prevPrice > 0 && currentPrice > 0) {
+            dayReturns[asset.symbol] = Math.log(currentPrice / prevPrice);
+          } else {
+            dayReturns[asset.symbol] = 0;
+          }
+        });
         returnsData.push(dayReturns);
       }
+      
+      setPortfolioData(portfolioData);
+      setReturns(returnsData);
+      console.log('Historical data loaded:', portfolioData.length, 'days');
+    } catch (error) {
+      console.error('Error loading historical data:', error);
     }
-    
-    setPortfolioData(data);
-    setReturns(returnsData);
+    setIsLoadingData(false);
   };
 
   // Risk calculation functions
   const calculatePortfolioReturns = () => {
+    if (returns.length === 0 || selectedAssets.length === 0) return [];
+    
     return returns.map(dayReturns => {
-      const assets = ['Stock A', 'Stock B', 'Bond C', 'Commodity D'];
-      return assets.reduce((sum, asset, idx) => 
-        sum + weights[idx] * dayReturns[asset], 0
-      );
+      return selectedAssets.reduce((sum, asset, idx) => {
+        const weight = weights[idx] || 0;
+        const assetReturn = dayReturns[asset.symbol] || 0;
+        return sum + weight * assetReturn;
+      }, 0);
     });
   };
 
   const calculateCorrelationMatrix = () => {
-    const assets = ['Stock A', 'Stock B', 'Bond C', 'Commodity D'];
-    const matrix = Array(4).fill(0).map(() => Array(4).fill(0));
+    if (selectedAssets.length === 0 || returns.length === 0) {
+      return [[1]];
+    }
     
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
+    const matrix = Array(selectedAssets.length).fill(0).map(() => Array(selectedAssets.length).fill(0));
+    
+    for (let i = 0; i < selectedAssets.length; i++) {
+      for (let j = 0; j < selectedAssets.length; j++) {
         if (i === j) {
           matrix[i][j] = 1.0;
         } else {
-          const returnsI = returns.map(r => r[assets[i]]);
-          const returnsJ = returns.map(r => r[assets[j]]);
-          matrix[i][j] = calculateCorrelation(returnsI, returnsJ);
+          const returnsI = returns.map(r => r[selectedAssets[i].symbol] || 0);
+          const returnsJ = returns.map(r => r[selectedAssets[j].symbol] || 0);
+          try {
+            matrix[i][j] = calculateCorrelation(returnsI, returnsJ);
+          } catch {
+            matrix[i][j] = 0;
+          }
         }
       }
     }
@@ -124,7 +151,7 @@ const CopulaPortfolioRiskTool = () => {
     
     for (let sim = 0; sim < nSims; sim++) {
       let copulaVariates;
-      const uniforms = Array(4).fill(0).map(() => Math.random());
+      const uniforms = Array(selectedAssets.length).fill(0).map(() => Math.random());
       
       switch (selectedCopula) {
         case 'gaussian':
@@ -145,10 +172,9 @@ const CopulaPortfolioRiskTool = () => {
       
       // Transform to marginal distributions and calculate portfolio return
       const portfolioReturn = copulaVariates.reduce((sum, variate, idx) => {
-        if (idx < weights.length) {
-          // Transform to normal distribution for simplicity
+        if (idx < weights.length && idx < selectedAssets.length) {
           const standardNormal = normalRandom();
-          return sum + weights[idx] * standardNormal * 0.02; // 2% daily volatility
+          return sum + weights[idx] * standardNormal * 0.02;
         }
         return sum;
       }, 0);
@@ -160,11 +186,20 @@ const CopulaPortfolioRiskTool = () => {
   };
 
   const performRiskAnalysis = async () => {
+    if (selectedAssets.length === 0 || returns.length === 0) {
+      alert('Please select assets and load historical data first.');
+      return;
+    }
+    
     setIsCalculating(true);
     
     try {
       // Historical analysis
       const historicalReturns = calculatePortfolioReturns();
+      if (historicalReturns.length === 0) {
+        throw new Error('No historical returns data available');
+      }
+      
       const historicalVaR = calculateVaR(historicalReturns, confidenceLevel[0]);
       const historicalCVaR = calculateCVaR(historicalReturns, confidenceLevel[0]);
       
@@ -195,13 +230,14 @@ const CopulaPortfolioRiskTool = () => {
         simulated: {
           var: simulatedVaR,
           cvar: simulatedCVaR,
-          returns: simulatedReturns.slice(0, 1000) // Limit for visualization
+          returns: simulatedReturns.slice(0, 1000)
         },
         correlationMatrix: calculateCorrelationMatrix(),
         copulaType: selectedCopula
       });
     } catch (error) {
       console.error('Risk analysis error:', error);
+      alert('Error performing risk analysis. Please check the console for details.');
     }
     
     setIsCalculating(false);
@@ -240,7 +276,7 @@ const CopulaPortfolioRiskTool = () => {
               Copula Portfolio Risk Manager
             </h1>
             <p className="text-muted-foreground text-lg">
-              Advanced dependence modeling for sophisticated risk analysis
+              Advanced dependence modeling with real NSE market data
             </p>
           </div>
           <Button
@@ -253,13 +289,23 @@ const CopulaPortfolioRiskTool = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="analysis" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs defaultValue="assets" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="assets">Assets</TabsTrigger>
             <TabsTrigger value="analysis">Analysis</TabsTrigger>
             <TabsTrigger value="configuration">Configuration</TabsTrigger>
             <TabsTrigger value="visualization">Visualization</TabsTrigger>
             <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="assets" className="space-y-6">
+            <AssetSelector
+              selectedAssets={selectedAssets}
+              onAssetsChange={setSelectedAssets}
+              weights={weights}
+              onWeightsChange={setWeights}
+            />
+          </TabsContent>
 
           <TabsContent value="analysis" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -272,9 +318,9 @@ const CopulaPortfolioRiskTool = () => {
                 setTimeHorizon={setTimeHorizon}
                 weights={weights}
                 setWeights={setWeights}
-                isCalculating={isCalculating}
+                isCalculating={isCalculating || isLoadingData}
                 performRiskAnalysis={performRiskAnalysis}
-                generateSyntheticData={generateSyntheticData}
+                generateSyntheticData={loadHistoricalData}
               />
 
               <RiskMetricsDashboard
@@ -295,9 +341,9 @@ const CopulaPortfolioRiskTool = () => {
                 setTimeHorizon={setTimeHorizon}
                 weights={weights}
                 setWeights={setWeights}
-                isCalculating={isCalculating}
+                isCalculating={isCalculating || isLoadingData}
                 performRiskAnalysis={performRiskAnalysis}
-                generateSyntheticData={generateSyntheticData}
+                generateSyntheticData={loadHistoricalData}
               />
             </div>
           </TabsContent>
@@ -318,14 +364,13 @@ const CopulaPortfolioRiskTool = () => {
         {/* Footer */}
         <div className="text-center text-muted-foreground text-sm border-t pt-6">
           <p className="mb-2">
-            Advanced Copula Models • Monte Carlo Simulation • Real-time Analytics
+            Real NSE Market Data • Advanced Copula Models • Monte Carlo Simulation
           </p>
           <div className="flex justify-center gap-2 text-xs">
-            <Badge variant="outline">Gaussian</Badge>
-            <Badge variant="outline">Student-t</Badge>
-            <Badge variant="outline">Clayton</Badge>
-            <Badge variant="outline">Gumbel</Badge>
-            <Badge variant="outline">Archimedean</Badge>
+            <Badge variant="outline">Yahoo Finance</Badge>
+            <Badge variant="outline">NSE Stocks</Badge>
+            <Badge variant="outline">Real-time Data</Badge>
+            <Badge variant="outline">Dynamic Assets</Badge>
           </div>
         </div>
       </div>
