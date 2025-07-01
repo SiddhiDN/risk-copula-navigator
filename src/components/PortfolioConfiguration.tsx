@@ -36,21 +36,6 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
   performRiskAnalysis,
   generateSyntheticData
 }) => {
-  const normalizeWeights = () => {
-    const total = weights.reduce((sum, w) => sum + w, 0);
-    if (total > 0) {
-      const normalizedWeights = weights.map(w => w / total);
-      setWeights(normalizedWeights);
-    }
-  };
-
-  const equalizeWeights = () => {
-    if (weights.length > 0) {
-      const equalWeight = 1 / weights.length;
-      setWeights(weights.map(() => equalWeight));
-    }
-  };
-
   return (
     <>
       {/* Quick Configuration */}
@@ -58,10 +43,10 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Risk Configuration
+            Quick Setup
           </CardTitle>
           <CardDescription>
-            Configure your portfolio risk parameters
+            Configure your portfolio parameters
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -115,7 +100,7 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
           <div className="space-y-4">
             <Button
               onClick={performRiskAnalysis}
-              disabled={isCalculating || weights.length === 0}
+              disabled={isCalculating}
               className="w-full"
             >
               {isCalculating ? (
@@ -135,10 +120,9 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
               onClick={generateSyntheticData}
               variant="outline"
               className="w-full"
-              disabled={isCalculating}
             >
               <Upload className="mr-2 h-4 w-4" />
-              Refresh Market Data
+              Generate New Data
             </Button>
           </div>
 
@@ -146,76 +130,65 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
             <div className="font-medium mb-2">Model Features:</div>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-              <span>Real NSE market data</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
               <span>Dynamic copula estimation</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+              <span>Monte Carlo simulation</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="h-2 w-2 bg-purple-500 rounded-full"></div>
-              <span>Yahoo Finance integration</span>
+              <span>Tail dependence modeling</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 bg-orange-500 rounded-full"></div>
-              <span>Live correlation analysis</span>
+              <span>Multi-asset correlation</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Portfolio Weights Configuration */}
-      {weights.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Portfolio Weights</CardTitle>
-            <CardDescription>
-              Adjust the allocation across your selected assets
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {weights.map((weight, idx) => (
-              <div key={idx} className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <Label>Asset {String.fromCharCode(65 + idx)}</Label>
-                  <span className="font-mono">{(weight * 100).toFixed(1)}%</span>
-                </div>
-                <Slider
-                  value={[weight * 100]}
-                  onValueChange={(value) => {
-                    const newWeights = [...weights];
-                    newWeights[idx] = value[0] / 100;
-                    setWeights(newWeights);
-                  }}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-                <Progress value={weight * 100} className="h-2" />
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio Weights</CardTitle>
+          <CardDescription>
+            Adjust the allocation across your portfolio assets
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {weights.map((weight, idx) => (
+            <div key={idx} className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <Label>Asset {String.fromCharCode(65 + idx)}</Label>
+                <span className="font-mono">{(weight * 100).toFixed(1)}%</span>
               </div>
-            ))}
-            
-            <div className="pt-4 border-t space-y-2">
-              <div className="flex justify-between text-sm font-medium">
-                <span>Total Allocation:</span>
-                <span className={`font-mono ${Math.abs(weights.reduce((sum, w) => sum + w, 0) - 1) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>
-                  {(weights.reduce((sum, w) => sum + w, 0) * 100).toFixed(1)}%
-                </span>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button onClick={normalizeWeights} size="sm" variant="outline" className="flex-1">
-                  Normalize
-                </Button>
-                <Button onClick={equalizeWeights} size="sm" variant="outline" className="flex-1">
-                  Equalize
-                </Button>
-              </div>
+              <Slider
+                value={[weight * 100]}
+                onValueChange={(value) => {
+                  const newWeights = [...weights];
+                  newWeights[idx] = value[0] / 100;
+                  setWeights(newWeights);
+                }}
+                min={0}
+                max={100}
+                step={1}
+                className="w-full"
+              />
+              <Progress value={weight * 100} className="h-2" />
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ))}
+          
+          <div className="pt-4 border-t">
+            <div className="flex justify-between text-sm font-medium">
+              <span>Total Allocation:</span>
+              <span className={`font-mono ${Math.abs(weights.reduce((sum, w) => sum + w, 0) - 1) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>
+                {(weights.reduce((sum, w) => sum + w, 0) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Advanced Parameters */}
       <Card>
@@ -257,16 +230,16 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
             </div>
             
             <div>
-              <Label className="text-sm font-medium">Data Period</Label>
-              <Select defaultValue="1y">
+              <Label className="text-sm font-medium">Rebalancing Frequency</Label>
+              <Select defaultValue="daily">
                 <SelectTrigger className="w-full mt-2">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1m">1 Month</SelectItem>
-                  <SelectItem value="3m">3 Months</SelectItem>
-                  <SelectItem value="6m">6 Months</SelectItem>
-                  <SelectItem value="1y">1 Year</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
