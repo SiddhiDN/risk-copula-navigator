@@ -1,33 +1,14 @@
 
 'use client';
 
-import { Canvas, extend, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useAspect, useTexture } from '@react-three/drei';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Mesh } from 'three';
 
-import {
-  abs,
-  blendScreen,
-  float,
-  mod,
-  mx_cell_noise_float,
-  oneMinus,
-  smoothstep,
-  texture,
-  uniform,
-  uv,
-  vec2,
-  vec3,
-  mix,
-  add
-} from 'three/tsl';
-
 const TEXTUREMAP = { src: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800' };
 const DEPTHMAP = { src: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800' };
-
-extend(THREE as any);
 
 // Post Processing component
 const PostProcessing = ({
@@ -42,31 +23,10 @@ const PostProcessing = ({
   const { gl, scene, camera } = useThree();
   const progressRef = useRef({ value: 0 });
 
-  const render = useMemo(() => {
-    // Create a simple post-processing effect using standard WebGL
-    const renderTarget = new THREE.WebGLRenderTarget(
-      gl.domElement.clientWidth,
-      gl.domElement.clientHeight
-    );
-
-    const postProcessing = {
-      renderTarget,
-      renderAsync: () => {
-        // Simple render without advanced post-processing for compatibility
-        gl.setRenderTarget(renderTarget);
-        gl.render(scene, camera);
-        gl.setRenderTarget(null);
-        gl.render(scene, camera);
-      }
-    };
-
-    return postProcessing;
-  }, [camera, gl, scene]);
-
   useFrame(({ clock }) => {
     // Animate the scan line from top to bottom
     progressRef.current.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-    render.renderAsync();
+    gl.render(scene, camera);
   }, 1);
 
   return null;
@@ -77,9 +37,9 @@ const HEIGHT = 300;
 
 const Scene = () => {
   const [rawMap, depthMap] = useTexture([TEXTUREMAP.src, DEPTHMAP.src]);
-
   const meshRef = useRef<Mesh>(null);
   const [visible, setVisible] = useState(false);
+  const materialRef = useRef<THREE.ShaderMaterial>();
 
   useEffect(() => {
     // Show image after textures load
@@ -88,59 +48,73 @@ const Scene = () => {
     }
   }, [rawMap, depthMap]);
 
-  const { material, uniforms } = useMemo(() => {
-    const uPointer = uniform(new THREE.Vector2(0));
-    const uProgress = uniform(0);
+  const material = useMemo(() => {
+    if (!rawMap || !depthMap) return null;
 
-    const strength = 0.01;
+    const shaderMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTexture: { value: rawMap },
+        uDepthMap: { value: depthMap },
+        uPointer: { value: new THREE.Vector2(0, 0) },
+        uProgress: { value: 0 },
+        uTime: { value: 0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uTexture;
+        uniform sampler2D uDepthMap;
+        uniform vec2 uPointer;
+        uniform float uProgress;
+        uniform float uTime;
+        varying vec2 vUv;
 
-    const tDepthMap = texture(depthMap);
-
-    const tMap = texture(
-      rawMap,
-      uv().add(tDepthMap.r.mul(uPointer).mul(strength))
-    );
-
-    const aspect = float(WIDTH).div(HEIGHT);
-    const tUv = vec2(uv().x.mul(aspect), uv().y);
-
-    const tiling = vec2(120.0);
-    const tiledUv = mod(tUv.mul(tiling), 2.0).sub(1.0);
-
-    const brightness = mx_cell_noise_float(tUv.mul(tiling).div(2));
-
-    const dist = float(tiledUv.length());
-    const dot = float(smoothstep(0.5, 0.49, dist)).mul(brightness);
-
-    const depth = tDepthMap;
-
-    const flow = oneMinus(smoothstep(0, 0.02, abs(depth.sub(uProgress))));
-
-    const mask = dot.mul(flow).mul(vec3(10, 0, 0));
-
-    const final = blendScreen(tMap, mask);
-
-    const material = new THREE.MeshBasicMaterial({
-      map: rawMap,
+        void main() {
+          float strength = 0.01;
+          vec4 depth = texture2D(uDepthMap, vUv);
+          vec2 distortedUv = vUv + depth.r * uPointer * strength;
+          vec4 color = texture2D(uTexture, distortedUv);
+          
+          // Add scanning effect
+          float scanLine = abs(vUv.y - uProgress);
+          float scanWidth = 0.02;
+          float scan = 1.0 - smoothstep(0.0, scanWidth, scanLine);
+          
+          // Add grid effect
+          vec2 grid = fract(vUv * 120.0) - 0.5;
+          float gridDist = length(grid);
+          float gridEffect = 1.0 - smoothstep(0.4, 0.5, gridDist);
+          
+          // Combine effects
+          vec3 scanColor = vec3(1.0, 0.0, 0.0) * scan * 0.5;
+          vec3 gridColor = vec3(0.0, 1.0, 0.0) * gridEffect * 0.1;
+          
+          gl_FragColor = vec4(color.rgb + scanColor + gridColor, 1.0);
+        }
+      `,
       transparent: true,
-      opacity: 0,
     });
 
-    return {
-      material,
-      uniforms: {
-        uPointer,
-        uProgress,
-      },
-    };
+    materialRef.current = shaderMaterial;
+    return shaderMaterial;
   }, [rawMap, depthMap]);
 
   const [w, h] = useAspect(WIDTH, HEIGHT);
 
-  useFrame(({ clock }) => {
-    uniforms.uProgress.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
+  useFrame(({ clock, pointer }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uProgress.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
+      materialRef.current.uniforms.uPointer.value = pointer;
+      materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    }
+    
     // Smooth appearance
-    if (meshRef.current && 'material' in meshRef.current && meshRef.current.material) {
+    if (meshRef.current && meshRef.current.material) {
       const mat = meshRef.current.material as any;
       if ('opacity' in mat) {
         mat.opacity = THREE.MathUtils.lerp(
@@ -152,11 +126,10 @@ const Scene = () => {
     }
   });
 
-  useFrame(({ pointer }) => {
-    uniforms.uPointer.value = pointer;
-  });
-
   const scaleFactor = 0.40;
+  
+  if (!material) return null;
+
   return (
     <mesh ref={meshRef} scale={[w * scaleFactor, h * scaleFactor, 1]} material={material}>
       <planeGeometry />
