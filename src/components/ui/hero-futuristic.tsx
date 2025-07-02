@@ -2,208 +2,219 @@
 'use client';
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useAspect, useTexture } from '@react-three/drei';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Mesh } from 'three';
 
-const TEXTUREMAP = { src: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800' };
-const DEPTHMAP = { src: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800' };
-
-// Post Processing component
-const PostProcessing = ({
-  strength = 1,
-  threshold = 1,
-  fullScreenEffect = true,
-}: {
-  strength?: number;
-  threshold?: number;
-  fullScreenEffect?: boolean;
-}) => {
-  const { gl, scene, camera } = useThree();
-  const progressRef = useRef({ value: 0 });
-
-  useFrame(({ clock }) => {
-    // Animate the scan line from top to bottom
-    progressRef.current.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-    gl.render(scene, camera);
-  }, 1);
-
-  return null;
-};
-
-const WIDTH = 300;
-const HEIGHT = 300;
-
-const Scene = () => {
-  const [rawMap, depthMap] = useTexture([TEXTUREMAP.src, DEPTHMAP.src]);
+const BlobShape = () => {
   const meshRef = useRef<Mesh>(null);
-  const [visible, setVisible] = useState(false);
-  const materialRef = useRef<THREE.ShaderMaterial>();
-
-  useEffect(() => {
-    // Show image after textures load
-    if (rawMap && depthMap) {
-      setVisible(true);
+  
+  const geometry = useMemo(() => {
+    const geo = new THREE.SphereGeometry(1, 32, 32);
+    const positions = geo.attributes.position.array as Float32Array;
+    
+    // Deform the sphere to create a blob shape
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      const y = positions[i + 1];
+      const z = positions[i + 2];
+      
+      // Add noise-like deformation
+      const noise = Math.sin(x * 3) * Math.cos(y * 3) * Math.sin(z * 3) * 0.3;
+      const distance = Math.sqrt(x * x + y * y + z * z);
+      const newDistance = distance + noise;
+      
+      positions[i] = (x / distance) * newDistance;
+      positions[i + 1] = (y / distance) * newDistance;
+      positions[i + 2] = (z / distance) * newDistance;
     }
-  }, [rawMap, depthMap]);
+    
+    geo.attributes.position.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }, []);
 
   const material = useMemo(() => {
-    if (!rawMap || !depthMap) return null;
-
-    const shaderMaterial = new THREE.ShaderMaterial({
+    return new THREE.ShaderMaterial({
       uniforms: {
-        uTexture: { value: rawMap },
-        uDepthMap: { value: depthMap },
-        uPointer: { value: new THREE.Vector2(0, 0) },
-        uProgress: { value: 0 },
-        uTime: { value: 0 }
+        uTime: { value: 0 },
+        uColor1: { value: new THREE.Color('#ffffff') },
+        uColor2: { value: new THREE.Color('#ff0000') },
       },
       vertexShader: `
-        varying vec2 vUv;
+        varying vec3 vPosition;
+        varying vec3 vNormal;
+        uniform float uTime;
+        
         void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vPosition = position;
+          vNormal = normal;
+          
+          vec3 pos = position;
+          float wave = sin(pos.x * 2.0 + uTime) * cos(pos.y * 2.0 + uTime) * 0.1;
+          pos += normal * wave;
+          
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
       `,
       fragmentShader: `
-        uniform sampler2D uTexture;
-        uniform sampler2D uDepthMap;
-        uniform vec2 uPointer;
-        uniform float uProgress;
         uniform float uTime;
-        varying vec2 vUv;
-
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        varying vec3 vPosition;
+        varying vec3 vNormal;
+        
         void main() {
-          float strength = 0.01;
-          vec4 depth = texture2D(uDepthMap, vUv);
-          vec2 distortedUv = vUv + depth.r * uPointer * strength;
-          vec4 color = texture2D(uTexture, distortedUv);
+          float pattern = sin(vPosition.x * 15.0) * sin(vPosition.y * 15.0) * sin(vPosition.z * 15.0);
+          float dots = step(0.3, pattern);
           
-          // Add scanning effect
-          float scanLine = abs(vUv.y - uProgress);
-          float scanWidth = 0.02;
-          float scan = 1.0 - smoothstep(0.0, scanWidth, scanLine);
+          vec3 color = mix(uColor1, uColor2, dots);
           
-          // Add grid effect
-          vec2 grid = fract(vUv * 120.0) - 0.5;
-          float gridDist = length(grid);
-          float gridEffect = 1.0 - smoothstep(0.4, 0.5, gridDist);
+          // Add rim lighting
+          float rim = 1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
+          rim = pow(rim, 2.0);
+          color += uColor2 * rim * 0.5;
           
-          // Combine effects
-          vec3 scanColor = vec3(1.0, 0.0, 0.0) * scan * 0.5;
-          vec3 gridColor = vec3(0.0, 1.0, 0.0) * gridEffect * 0.1;
-          
-          gl_FragColor = vec4(color.rgb + scanColor + gridColor, 1.0);
+          gl_FragColor = vec4(color, 1.0);
         }
       `,
       transparent: true,
     });
+  }, []);
 
-    materialRef.current = shaderMaterial;
-    return shaderMaterial;
-  }, [rawMap, depthMap]);
-
-  const [w, h] = useAspect(WIDTH, HEIGHT);
-
-  useFrame(({ clock, pointer }) => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.uProgress.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-      materialRef.current.uniforms.uPointer.value = pointer;
-      materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
-    }
-    
-    // Smooth appearance
-    if (meshRef.current && meshRef.current.material) {
-      const mat = meshRef.current.material as any;
-      if ('opacity' in mat) {
-        mat.opacity = THREE.MathUtils.lerp(
-          mat.opacity,
-          visible ? 1 : 0,
-          0.07
-        );
-      }
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      const mat = meshRef.current.material as THREE.ShaderMaterial;
+      mat.uniforms.uTime.value = clock.getElapsedTime();
+      meshRef.current.rotation.y = clock.getElapsedTime() * 0.5;
+      meshRef.current.rotation.x = Math.sin(clock.getElapsedTime() * 0.3) * 0.2;
     }
   });
 
-  const scaleFactor = 0.40;
+  return (
+    <mesh ref={meshRef} geometry={geometry} material={material} scale={[2, 1.5, 1.5]} />
+  );
+};
+
+const DottedLine = () => {
+  const pointsRef = useRef<THREE.Points>(null);
   
-  if (!material) return null;
+  const { geometry, material } = useMemo(() => {
+    const positions = [];
+    const colors = [];
+    
+    // Create dotted line pattern
+    for (let i = 0; i < 100; i++) {
+      const x = (i - 50) * 0.1;
+      const y = Math.sin(i * 0.2) * 0.1;
+      const z = 0;
+      
+      positions.push(x, y, z);
+      colors.push(1, 0, 0); // Red color
+    }
+    
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    
+    const mat = new THREE.PointsMaterial({
+      size: 0.05,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+    });
+    
+    return { geometry: geo, material: mat };
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) {
+      const positions = geometry.attributes.position.array as Float32Array;
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i + 1] = Math.sin((i / 3) * 0.2 + clock.getElapsedTime() * 2) * 0.1;
+      }
+      geometry.attributes.position.needsUpdate = true;
+    }
+  });
 
   return (
-    <mesh ref={meshRef} scale={[w * scaleFactor, h * scaleFactor, 1]} material={material}>
-      <planeGeometry />
-    </mesh>
+    <points ref={pointsRef} geometry={geometry} material={material} position={[0, -2, 0]} />
+  );
+};
+
+const Scene = () => {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    camera.position.set(0, 0, 5);
+  }, [camera]);
+
+  return (
+    <>
+      <ambientLight intensity={0.3} />
+      <directionalLight position={[5, 5, 5]} intensity={1} />
+      <BlobShape />
+      <DottedLine />
+    </>
   );
 };
 
 export const Html = () => {
-  const titleWords = 'Copula Risk Manager'.split(' ');
-  const subtitle = 'Advanced dependence modeling for sophisticated risk analysis';
-  const [visibleWords, setVisibleWords] = useState(0);
-  const [subtitleVisible, setSubtitleVisible] = useState(false);
-  const [delays, setDelays] = useState<number[]>([]);
-  const [subtitleDelay, setSubtitleDelay] = useState(0);
+  const [titleVisible, setTitleVisible] = useState(false);
+  const [buttonVisible, setButtonVisible] = useState(false);
 
   useEffect(() => {
-    // Generate random delays for glitch effect on client side only
-    setDelays(titleWords.map(() => Math.random() * 0.07));
-    setSubtitleDelay(Math.random() * 0.1);
-  }, [titleWords.length]);
-
-  useEffect(() => {
-    if (visibleWords < titleWords.length) {
-      const timeout = setTimeout(() => setVisibleWords(visibleWords + 1), 600);
-      return () => clearTimeout(timeout);
-    } else {
-      const timeout = setTimeout(() => setSubtitleVisible(true), 800);
-      return () => clearTimeout(timeout);
-    }
-  }, [visibleWords, titleWords.length]);
+    const titleTimer = setTimeout(() => setTitleVisible(true), 500);
+    const buttonTimer = setTimeout(() => setButtonVisible(true), 1500);
+    
+    return () => {
+      clearTimeout(titleTimer);
+      clearTimeout(buttonTimer);
+    };
+  }, []);
 
   return (
-    <div className="h-svh">
-      <div className="h-svh uppercase items-center w-full absolute z-60 pointer-events-none px-10 flex justify-center flex-col">
-        <div className="text-3xl md:text-5xl xl:text-6xl 2xl:text-7xl font-extrabold">
-          <div className="flex space-x-2 lg:space-x-6 overflow-hidden text-white">
-            {titleWords.map((word, index) => (
-              <div
-                key={index}
-                className={index < visibleWords ? 'fade-in' : ''}
-                style={{ animationDelay: `${index * 0.13 + (delays[index] || 0)}s`, opacity: index < visibleWords ? undefined : 0 }}
-              >
-                {word}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="text-xs md:text-xl xl:text-2xl 2xl:text-3xl mt-2 overflow-hidden text-white font-bold">
-          <div
-            className={subtitleVisible ? 'fade-in-subtitle' : ''}
-            style={{ animationDelay: `${titleWords.length * 0.13 + 0.2 + subtitleDelay}s`, opacity: subtitleVisible ? undefined : 0 }}
-          >
-            {subtitle}
-          </div>
+    <div className="h-screen w-full relative overflow-hidden bg-black">
+      {/* 3D Canvas Background */}
+      <div className="absolute inset-0 z-10">
+        <Canvas camera={{ position: [0, 0, 5], fov: 75 }}>
+          <Scene />
+        </Canvas>
+      </div>
+
+      {/* Text Content */}
+      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
+        <div 
+          className={`text-6xl md:text-8xl font-black text-white mb-8 text-center transition-all duration-1000 ${
+            titleVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+          }`}
+          style={{ 
+            fontFamily: 'Arial Black, sans-serif',
+            letterSpacing: '0.05em',
+            textShadow: '0 0 20px rgba(255, 255, 255, 0.5)'
+          }}
+        >
+          BUILD YOUR DREAMS
         </div>
       </div>
 
-      <button
-        className="explore-btn"
-        style={{ animationDelay: '2.2s' }}
+      {/* Scroll Button */}
+      <div 
+        className={`absolute bottom-20 left-1/2 transform -translate-x-1/2 z-30 transition-all duration-1000 ${
+          buttonVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}
       >
-        Enter Application
-        <span className="explore-arrow">
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" className="arrow-svg">
-            <path d="M11 5V17" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M6 12L11 17L16 12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </span>
-      </button>
-
-      <Canvas>
-        <PostProcessing fullScreenEffect={true} />
-        <Scene />
-      </Canvas>
+        <button className="group border-2 border-white/30 rounded-full px-8 py-4 text-white font-medium hover:border-white/60 transition-all duration-300 pointer-events-auto backdrop-blur-sm bg-white/5">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">Scroll to explore</span>
+            <div className="transform group-hover:translate-y-1 transition-transform duration-300">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12l7 7 7-7"/>
+              </svg>
+            </div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 };
