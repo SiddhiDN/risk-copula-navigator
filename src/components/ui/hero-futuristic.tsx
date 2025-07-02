@@ -4,8 +4,7 @@
 import { Canvas, extend, useFrame, useThree } from '@react-three/fiber';
 import { useAspect, useTexture } from '@react-three/drei';
 import { useMemo, useRef, useState, useEffect } from 'react';
-import * as THREE from 'three/webgpu';
-import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
+import * as THREE from 'three';
 import { Mesh } from 'three';
 
 import {
@@ -21,7 +20,6 @@ import {
   uv,
   vec2,
   vec3,
-  pass,
   mix,
   add
 } from 'three/tsl';
@@ -45,36 +43,25 @@ const PostProcessing = ({
   const progressRef = useRef({ value: 0 });
 
   const render = useMemo(() => {
-    const postProcessing = new THREE.PostProcessing(gl as any);
-    const scenePass = pass(scene, camera);
-    const scenePassColor = scenePass.getTextureNode('output');
-    const bloomPass = bloom(scenePassColor, strength, 0.5, threshold);
-
-    // Create the scanning effect uniform
-    const uScanProgress = uniform(0);
-    progressRef.current = uScanProgress;
-
-    // Create a red overlay that follows the scan line
-    const scanPos = float(uScanProgress.value);
-    const uvY = uv().y;
-    const scanWidth = float(0.05);
-    const scanLine = smoothstep(0, scanWidth, abs(uvY.sub(scanPos)));
-    const redOverlay = vec3(1, 0, 0).mul(oneMinus(scanLine)).mul(0.4);
-
-    // Mix the original scene with the red overlay
-    const withScanEffect = mix(
-      scenePassColor,
-      add(scenePassColor, redOverlay),
-      fullScreenEffect ? smoothstep(0.9, 1.0, oneMinus(scanLine)) : 1.0
+    // Create a simple post-processing effect using standard WebGL
+    const renderTarget = new THREE.WebGLRenderTarget(
+      gl.domElement.clientWidth,
+      gl.domElement.clientHeight
     );
 
-    // Add bloom effect after scan effect
-    const final = withScanEffect.add(bloomPass);
-
-    postProcessing.outputNode = final;
+    const postProcessing = {
+      renderTarget,
+      renderAsync: () => {
+        // Simple render without advanced post-processing for compatibility
+        gl.setRenderTarget(renderTarget);
+        gl.render(scene, camera);
+        gl.setRenderTarget(null);
+        gl.render(scene, camera);
+      }
+    };
 
     return postProcessing;
-  }, [camera, gl, scene, strength, threshold, fullScreenEffect]);
+  }, [camera, gl, scene]);
 
   useFrame(({ clock }) => {
     // Animate the scan line from top to bottom
@@ -133,8 +120,8 @@ const Scene = () => {
 
     const final = blendScreen(tMap, mask);
 
-    const material = new THREE.MeshBasicNodeMaterial({
-      colorNode: final,
+    const material = new THREE.MeshBasicMaterial({
+      map: rawMap,
       transparent: true,
       opacity: 0,
     });
@@ -240,14 +227,7 @@ export const Html = () => {
         </span>
       </button>
 
-      <Canvas
-        flat
-        gl={async (props) => {
-          const renderer = new THREE.WebGPURenderer(props as any);
-          await renderer.init();
-          return renderer;
-        }}
-      >
+      <Canvas>
         <PostProcessing fullScreenEffect={true} />
         <Scene />
       </Canvas>
