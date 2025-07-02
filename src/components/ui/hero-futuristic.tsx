@@ -194,7 +194,7 @@ export const Html = () => {
             textShadow: '0 0 20px rgba(255, 255, 255, 0.5)'
           }}
         >
-          BUILD YOUR DREAMS
+          COPULA RISK MANAGER
         </div>
       </div>
 
