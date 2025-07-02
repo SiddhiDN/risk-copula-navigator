@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from 'next-themes';
 import { normalRandom, choleskyDecomposition, multiplyMatrixVector, calculateCorrelation, calculateVaR, calculateCVaR, calculateMaxDrawdown, calculateSharpeRatio } from '@/utils/mathUtils';
@@ -252,67 +252,43 @@ const CopulaPortfolioRiskTool = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="analysis" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="analysis">Analysis</TabsTrigger>
-            <TabsTrigger value="configuration">Configuration</TabsTrigger>
-            <TabsTrigger value="visualization">Visualization</TabsTrigger>
-            <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
-          </TabsList>
+        {/* Configuration Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <PortfolioConfiguration
+            selectedCopula={selectedCopula}
+            setSelectedCopula={setSelectedCopula}
+            confidenceLevel={confidenceLevel}
+            setConfidenceLevel={setConfidenceLevel}
+            timeHorizon={timeHorizon}
+            setTimeHorizon={setTimeHorizon}
+            weights={weights}
+            setWeights={setWeights}
+            isCalculating={isCalculating}
+            performRiskAnalysis={performRiskAnalysis}
+            generateSyntheticData={generateSyntheticData}
+          />
 
-          <TabsContent value="analysis" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <PortfolioConfiguration
-                selectedCopula={selectedCopula}
-                setSelectedCopula={setSelectedCopula}
-                confidenceLevel={confidenceLevel}
-                setConfidenceLevel={setConfidenceLevel}
-                timeHorizon={timeHorizon}
-                setTimeHorizon={setTimeHorizon}
-                weights={weights}
-                setWeights={setWeights}
-                isCalculating={isCalculating}
-                performRiskAnalysis={performRiskAnalysis}
-                generateSyntheticData={generateSyntheticData}
-              />
+          <RiskMetricsDashboard
+            results={results}
+            confidenceLevel={confidenceLevel[0]}
+          />
+        </div>
 
-              <RiskMetricsDashboard
-                results={results}
-                confidenceLevel={confidenceLevel[0]}
-              />
-            </div>
-          </TabsContent>
+        {/* Visualization Section */}
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold">Analysis & Visualization</h2>
+          <VisualizationCharts
+            results={results}
+            returns={returns}
+            riskDistributionData={riskDistributionData}
+          />
+        </div>
 
-          <TabsContent value="configuration" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PortfolioConfiguration
-                selectedCopula={selectedCopula}
-                setSelectedCopula={setSelectedCopula}
-                confidenceLevel={confidenceLevel}
-                setConfidenceLevel={setConfidenceLevel}
-                timeHorizon={timeHorizon}
-                setTimeHorizon={setTimeHorizon}
-                weights={weights}
-                setWeights={setWeights}
-                isCalculating={isCalculating}
-                performRiskAnalysis={performRiskAnalysis}
-                generateSyntheticData={generateSyntheticData}
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="visualization" className="space-y-6">
-            <VisualizationCharts
-              results={results}
-              returns={returns}
-              riskDistributionData={riskDistributionData}
-            />
-          </TabsContent>
-
-          <TabsContent value="diagnostics" className="space-y-6">
-            <DiagnosticsPanel />
-          </TabsContent>
-        </Tabs>
+        {/* Diagnostics Section */}
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold">Diagnostics & Optimization</h2>
+          <DiagnosticsPanel />
+        </div>
 
         {/* Footer */}
         <div className="text-center text-muted-foreground text-sm border-t pt-6">
