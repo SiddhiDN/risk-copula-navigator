@@ -5,7 +5,7 @@
 **URL**: https://lovable.dev/projects/2f406a15-f15c-418b-b0a5-
 
 
-**PROJECT DESCRIPTION PDF**: [📄 View the PDF Report](https://github.com/SiddhiDN/risk-copula-navigator/supabase/Copula_RIsk_Manager_(1).pdf)
+**PROJECT DESCRIPTION PDF**:[Copula Risk Manager PDF](https://github.com/SiddhiDN/risk-copula-navigator/raw/main/supabase/PDF.pdf)
 
 
 ## How can I edit this code?
