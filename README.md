@@ -2,7 +2,11 @@
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/2f406a15-f15c-418b-b0a5-c006140ad462
+**URL**: https://lovable.dev/projects/2f406a15-f15c-418b-b0a5-
+
+
+**PROJECT DESCRIPTION PDF**: [📄 View the PDF Report](./Copula_Risk_Manager_(1).pdf)
+
 
 ## How can I edit this code?
 
