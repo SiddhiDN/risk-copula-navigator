@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,9 @@ interface RiskResults {
   simulated: {
     var: number;
     cvar: number;
+    volatility: number;
+    maxDrawdown: number;
+    sharpeRatio: number;
     returns: number[];
   };
   correlationMatrix: number[][];
@@ -266,28 +270,42 @@ const CopulaPortfolioRiskTool = () => {
       const simulatedVaR = calculateVaR(simulatedReturns, confidenceLevel[0]);
       const simulatedCVaR = calculateCVaR(simulatedReturns, confidenceLevel[0]);
       
-      // Risk metrics
-      const portfolioVolatility = Math.sqrt(
+      // Historical risk metrics
+      const historicalVolatility = Math.sqrt(
         historicalReturns.reduce((sum, ret) => {
           const mean = historicalReturns.reduce((s, r) => s + r, 0) / historicalReturns.length;
           return sum + Math.pow(ret - mean, 2);
         }, 0) / historicalReturns.length
       );
       
-      const maxDrawdown = calculateMaxDrawdown(historicalReturns);
-      const sharpeRatio = calculateSharpeRatio(historicalReturns);
+      const historicalMaxDrawdown = calculateMaxDrawdown(historicalReturns);
+      const historicalSharpeRatio = calculateSharpeRatio(historicalReturns);
+      
+      // Simulated risk metrics - using simulated returns
+      const portfolioVolatility = Math.sqrt(
+        simulatedReturns.reduce((sum, ret) => {
+          const mean = simulatedReturns.reduce((s, r) => s + r, 0) / simulatedReturns.length;
+          return sum + Math.pow(ret - mean, 2);
+        }, 0) / simulatedReturns.length
+      );
+
+      const maxDrawdown = calculateMaxDrawdown(simulatedReturns);
+      const sharpeRatio = calculateSharpeRatio(simulatedReturns);
       
       const analysisResults = {
         historical: {
           var: historicalVaR,
           cvar: historicalCVaR,
-          volatility: portfolioVolatility,
-          maxDrawdown,
-          sharpeRatio
+          volatility: historicalVolatility,
+          maxDrawdown: historicalMaxDrawdown,
+          sharpeRatio: historicalSharpeRatio
         },
         simulated: {
           var: simulatedVaR,
           cvar: simulatedCVaR,
+          volatility: portfolioVolatility,
+          maxDrawdown: maxDrawdown,
+          sharpeRatio: sharpeRatio,
           returns: simulatedReturns.slice(0, 1000) // Limit for visualization
         },
         correlationMatrix: calculateCorrelationMatrix(),

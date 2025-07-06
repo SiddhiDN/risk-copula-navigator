@@ -15,6 +15,9 @@ interface RiskResults {
   simulated: {
     var: number;
     cvar: number;
+    volatility: number;
+    maxDrawdown: number;
+    sharpeRatio: number;
     returns: number[];
   };
   correlationMatrix: number[][];
@@ -100,22 +103,22 @@ const RiskMetricsDashboard: React.FC<RiskMetricsDashboardProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-sm text-muted-foreground">Portfolio Volatility</div>
-              <div className="text-xl font-bold">{(results.historical.volatility * 100).toFixed(2)}%</div>
+              <div className="text-sm text-muted-foreground">Simulated Volatility</div>
+              <div className="text-xl font-bold">{(results.simulated.volatility * 100).toFixed(2)}%</div>
             </CardContent>
           </Card>
           
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-sm text-muted-foreground">Max Drawdown</div>
-              <div className="text-xl font-bold text-red-600">{(results.historical.maxDrawdown * 100).toFixed(2)}%</div>
+              <div className="text-sm text-muted-foreground">Simulated Max Drawdown</div>
+              <div className="text-xl font-bold text-red-600">{(results.simulated.maxDrawdown * 100).toFixed(2)}%</div>
             </CardContent>
           </Card>
           
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-sm text-muted-foreground">Sharpe Ratio</div>
-              <div className="text-xl font-bold text-green-600">{results.historical.sharpeRatio.toFixed(2)}</div>
+              <div className="text-sm text-muted-foreground">Simulated Sharpe Ratio</div>
+              <div className="text-xl font-bold text-green-600">{results.simulated.sharpeRatio.toFixed(2)}</div>
             </CardContent>
           </Card>
           

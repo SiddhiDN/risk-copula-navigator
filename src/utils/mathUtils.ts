@@ -120,6 +120,97 @@ export const calculateSharpeRatio = (returns: number[], riskFreeRate: number = 0
   return volatility === 0 ? 0 : excessReturn / volatility;
 };
 
+export function computeGoF(
+  hist: number[],
+  sim: number[]
+): number {
+  const all = Array.from(new Set([...hist, ...sim])).sort((a,b) => a - b);
+  const n1 = hist.length, n2 = sim.length;
+  let maxDiff = 0;
+
+  for (const x of all) {
+    const F1 = hist.filter(v => v <= x).length / n1;
+    const F2 = sim.filter(v => v <= x).length / n2;
+    maxDiff = Math.max(maxDiff, Math.abs(F1 - F2));
+  }
+  return +maxDiff.toFixed(4);
+}
+
+/**
+ * Empirical upper tail dependence λ_U ≈ P(X>u & Y>u) / [1-u]
+ */
+export function computeUpperTailDep(
+  x: number[],
+  y: number[],
+  u: number = 0.95
+): number {
+  const n = Math.min(x.length, y.length);
+  const cnt = x.reduce((sum, xi, i) =>
+    sum + (xi > u && y[i] > u ? 1 : 0), 0);
+  return +( cnt / n / (1 - u) ).toFixed(4);
+}
+
+/**
+ * Empirical lower tail dependence λ_L ≈ P(X<u & Y<u) / u
+ */
+export function computeLowerTailDep(
+  x: number[],
+  y: number[],
+  u: number = 0.05
+): number {
+  const n = Math.min(x.length, y.length);
+  const cnt = x.reduce((sum, xi, i) =>
+    sum + (xi < u && y[i] < u ? 1 : 0), 0);
+  return +( cnt / n / u ).toFixed(4);
+}
+
+/**
+ * Kendall's Tau rank correlation
+ */
+export function calculateKendallsTau(
+  x: number[],
+  y: number[]
+): number {
+  const n = Math.min(x.length, y.length);
+  let concordant = 0, discordant = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const signX = Math.sign(x[i] - x[j]);
+      const signY = Math.sign(y[i] - y[j]);
+      if (signX * signY > 0) concordant++;
+      else if (signX * signY < 0) discordant++;
+    }
+  }
+  const denom = n * (n - 1) / 2;
+  return +((concordant - discordant) / denom).toFixed(4);
+}
+
+/**
+ * Akaike Information Criterion: 2k - 2 ln(L)
+ * @param logLikelihood  sum of log pdf values for your fitted model
+ * @param k              number of free parameters in the copula
+ */
+export function calculateAIC(
+  logLikelihood: number,
+  k: number
+): number {
+  return +(2 * k - 2 * logLikelihood).toFixed(2);
+}
+
+/**
+ * Bayesian Information Criterion: ln(n)*k - 2 ln(L)
+ * @param logLikelihood  sum of log pdf values
+ * @param k              number of parameters
+ * @param n              number of observations used in fitting
+ */
+export function calculateBIC(
+  logLikelihood: number,
+  k: number,
+  n: number
+): number {
+  return +((Math.log(n) * k - 2 * logLikelihood)).toFixed(2);
+}
+
 // Extend Math interface to include erf
 declare global {
   interface Math {

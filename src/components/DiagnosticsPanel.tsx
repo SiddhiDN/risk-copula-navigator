@@ -2,7 +2,6 @@
 import React from 'react';
 import { TrendingDown, Calculator, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 interface DiagnosticsPanelProps {
@@ -126,10 +125,6 @@ const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               </div>
             )}
           </div>
-          
-          <Button size="sm" className="w-full" disabled={validAssets.length === 0}>
-            Apply Optimization
-          </Button>
         </CardContent>
       </Card>
     </div>
