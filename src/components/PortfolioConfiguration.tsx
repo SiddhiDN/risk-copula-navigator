@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Calculator, Upload } from 'lucide-react';
+import { Settings, Calculator } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -23,7 +23,6 @@ interface PortfolioConfigurationProps {
   setSelectedAssets: (assets: string[]) => void;
   isCalculating: boolean;
   performRiskAnalysis: () => void;
-  generateSyntheticData: () => void;
 }
 
 const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
@@ -38,8 +37,7 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
   selectedAssets,
   setSelectedAssets,
   isCalculating,
-  performRiskAnalysis,
-  generateSyntheticData
+  performRiskAnalysis
 }) => {
   const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
@@ -66,6 +64,17 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
     setSelectedAssets(newSelectedAssets);
   };
 
+  const handleWeightChange = (index: number, newWeight: number) => {
+    const newWeights = [...weights];
+    newWeights[index] = newWeight / 100;
+    
+    // Check if total exceeds 100%
+    const total = newWeights.reduce((sum, w) => sum + w, 0);
+    if (total <= 1.01) { // Allow slight rounding errors
+      setWeights(newWeights);
+    }
+  };
+
   const getAssetDisplayName = (symbol: string) => {
     const asset = availableAssets.find(a => a.symbol === symbol);
     return asset ? `${asset.symbol} - ${asset.name || 'Unknown'}` : symbol;
@@ -76,6 +85,9 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
       !selectedAssets.includes(asset.symbol) || selectedAssets[currentIndex] === asset.symbol
     );
   };
+
+  const totalAllocation = weights.reduce((sum, w) => sum + w, 0);
+  const isAllocationValid = Math.abs(totalAllocation - 1) < 0.01;
 
   return (
     <>
@@ -134,37 +146,6 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
                 className="mt-2"
               />
             </div>
-          </div>
-
-          <Separator />
-          
-          <div className="space-y-4">
-            <Button
-              onClick={performRiskAnalysis}
-              disabled={isCalculating}
-              className="w-full"
-            >
-              {isCalculating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Calculating...
-                </>
-              ) : (
-                <>
-                  <Calculator className="mr-2 h-4 w-4" />
-                  Perform Analysis
-                </>
-              )}
-            </Button>
-            
-            <Button
-              onClick={generateSyntheticData}
-              variant="outline"
-              className="w-full"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Generate New Data
-            </Button>
           </div>
 
           <div className="text-xs text-muted-foreground space-y-1">
@@ -237,11 +218,7 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
                     </div>
                     <Slider
                       value={[weight * 100]}
-                      onValueChange={(value) => {
-                        const newWeights = [...weights];
-                        newWeights[idx] = value[0] / 100;
-                        setWeights(newWeights);
-                      }}
+                      onValueChange={(value) => handleWeightChange(idx, value[0])}
                       min={0}
                       max={100}
                       step={1}
@@ -257,10 +234,15 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
           <div className="pt-4 border-t">
             <div className="flex justify-between text-sm font-medium">
               <span>Total Allocation:</span>
-              <span className={`font-mono ${Math.abs(weights.reduce((sum, w) => sum + w, 0) - 1) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>
-                {(weights.reduce((sum, w) => sum + w, 0) * 100).toFixed(1)}%
+              <span className={`font-mono ${isAllocationValid ? 'text-green-600' : 'text-red-600'}`}>
+                {(totalAllocation * 100).toFixed(1)}%
               </span>
             </div>
+            {!isAllocationValid && (
+              <div className="text-xs text-red-600 mt-1">
+                Total allocation must equal 100%
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -318,6 +300,34 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <Separator />
+          
+          <div className="space-y-4">
+            <Button
+              onClick={performRiskAnalysis}
+              disabled={isCalculating || !isAllocationValid}
+              className="w-full"
+            >
+              {isCalculating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Calculating...
+                </>
+              ) : (
+                <>
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Perform Analysis
+                </>
+              )}
+            </Button>
+            
+            {!isAllocationValid && (
+              <div className="text-xs text-red-600 text-center">
+                Please ensure total allocation equals 100% before running analysis
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

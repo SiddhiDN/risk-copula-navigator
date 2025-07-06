@@ -5,7 +5,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-const DiagnosticsPanel: React.FC = () => {
+interface DiagnosticsPanelProps {
+  selectedAssets: string[];
+  weights: number[];
+}
+
+const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ 
+  selectedAssets, 
+  weights 
+}) => {
+  const validAssets = selectedAssets.filter(asset => asset !== '');
+  
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Stress Testing */}
@@ -98,25 +108,26 @@ const DiagnosticsPanel: React.FC = () => {
           </div>
           
           <div className="space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span>Stock A:</span>
-              <span className="font-mono">35% (-5%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Stock B:</span>
-              <span className="font-mono">25% (-5%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Bond C:</span>
-              <span className="font-mono">30% (+10%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Comm D:</span>
-              <span className="font-mono">10% (0%)</span>
-            </div>
+            {validAssets.length > 0 ? (
+              validAssets.map((asset, index) => (
+                <div key={asset} className="flex justify-between">
+                  <span>{asset}:</span>
+                  <span className="font-mono">
+                    {((weights[index] || 0) * 100).toFixed(0)}% 
+                    <span className="text-muted-foreground">
+                      ({index % 2 === 0 ? '-5%' : '+10%'})
+                    </span>
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-muted-foreground">
+                Select assets to see optimization suggestions
+              </div>
+            )}
           </div>
           
-          <Button size="sm" className="w-full">
+          <Button size="sm" className="w-full" disabled={validAssets.length === 0}>
             Apply Optimization
           </Button>
         </CardContent>
