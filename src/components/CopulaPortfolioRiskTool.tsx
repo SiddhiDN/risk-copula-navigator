@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -35,6 +34,7 @@ const CopulaPortfolioRiskTool = () => {
   const [returns, setReturns] = useState<ProcessedReturn[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [weights, setWeights] = useState([0.4, 0.3, 0.2, 0.1]);
+  const [selectedAssets, setSelectedAssets] = useState<string[]>(['', '', '', '']);
   const [selectedCopula, setSelectedCopula] = useState('gaussian');
   const [confidenceLevel, setConfidenceLevel] = useState([95]);
   const [timeHorizon, setTimeHorizon] = useState([1]);
@@ -64,10 +64,26 @@ const CopulaPortfolioRiskTool = () => {
       
       setAssets(fetchedAssets);
       
-      // Take first 4 assets for the portfolio (or all if less than 4)
-      const portfolioAssets = fetchedAssets.slice(0, 4);
-      const symbols = portfolioAssets.map(asset => asset.symbol);
+      // Initialize selected assets with first 4 assets (or all if less than 4)
+      const initialAssets = fetchedAssets.slice(0, 4).map(asset => asset.symbol);
+      const paddedAssets = [...initialAssets, ...Array(4 - initialAssets.length).fill('')];
+      setSelectedAssets(paddedAssets);
       
+      // Load daily returns for initial assets
+      if (initialAssets.length > 0) {
+        await loadDailyReturnsForAssets(initialAssets);
+      }
+      
+    } catch (err) {
+      console.error('Error loading data from Supabase:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data from Supabase');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadDailyReturnsForAssets = async (symbols: string[]) => {
+    try {
       console.log('Loading daily returns for symbols:', symbols);
       const dailyReturns = await fetchDailyReturns(symbols, 252);
       console.log('Fetched daily returns:', dailyReturns.length, 'records');
@@ -87,23 +103,32 @@ const CopulaPortfolioRiskTool = () => {
       
       setPortfolioData(processedPortfolioData);
       setReturns(processedReturns);
+      setError(null);
       
-      // Adjust weights array to match number of assets
-      const newWeights = Array(portfolioAssets.length).fill(0).map((_, i) => 
-        i < weights.length ? weights[i] : 1 / portfolioAssets.length
+    } catch (err) {
+      console.error('Error loading daily returns:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load daily returns');
+    }
+  };
+
+  // Update data when selected assets change
+  useEffect(() => {
+    const validAssets = selectedAssets.filter(asset => asset !== '');
+    if (validAssets.length > 0) {
+      loadDailyReturnsForAssets(validAssets);
+      
+      // Adjust weights array to match selected assets
+      const newWeights = Array(validAssets.length).fill(0).map((_, i) => 
+        i < weights.length ? weights[i] : 1 / validAssets.length
       );
       // Normalize weights to sum to 1
       const weightSum = newWeights.reduce((sum, w) => sum + w, 0);
-      const normalizedWeights = newWeights.map(w => w / weightSum);
-      setWeights(normalizedWeights);
-      
-    } catch (err) {
-      console.error('Error loading data from Supabase:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data from Supabase');
-    } finally {
-      setIsLoading(false);
+      if (weightSum > 0) {
+        const normalizedWeights = newWeights.map(w => w / weightSum);
+        setWeights(normalizedWeights);
+      }
     }
-  };
+  }, [selectedAssets]);
 
   // Get available asset symbols for portfolio calculation
   const getAssetSymbols = () => {
@@ -310,6 +335,15 @@ const CopulaPortfolioRiskTool = () => {
     );
   }
 
+  const getSelectedAssetNames = () => {
+    return selectedAssets
+      .filter(symbol => symbol !== '')
+      .map(symbol => {
+        const asset = assets.find(a => a.symbol === symbol);
+        return asset ? asset.symbol : symbol;
+      });
+  };
+
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
       <div className="container mx-auto p-6 space-y-8">
@@ -322,9 +356,9 @@ const CopulaPortfolioRiskTool = () => {
             <p className="text-muted-foreground text-lg">
               Advanced dependence modeling using real market data from Supabase
             </p>
-            {assets.length > 0 && (
-              <div className="flex gap-2 mt-2">
-                {getAssetSymbols().map(symbol => (
+            {getSelectedAssetNames().length > 0 && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {getSelectedAssetNames().map(symbol => (
                   <Badge key={symbol} variant="outline">{symbol}</Badge>
                 ))}
               </div>
@@ -351,6 +385,8 @@ const CopulaPortfolioRiskTool = () => {
             setTimeHorizon={setTimeHorizon}
             weights={weights}
             setWeights={setWeights}
+            selectedAssets={selectedAssets}
+            setSelectedAssets={setSelectedAssets}
             isCalculating={isCalculating}
             performRiskAnalysis={performRiskAnalysis}
             generateSyntheticData={loadDataFromSupabase}

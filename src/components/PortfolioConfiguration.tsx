@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Calculator, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { fetchAssets, Asset } from '@/services/supabaseDataService';
 
 interface PortfolioConfigurationProps {
   selectedCopula: string;
@@ -18,6 +19,8 @@ interface PortfolioConfigurationProps {
   setTimeHorizon: (value: number[]) => void;
   weights: number[];
   setWeights: (weights: number[]) => void;
+  selectedAssets: string[];
+  setSelectedAssets: (assets: string[]) => void;
   isCalculating: boolean;
   performRiskAnalysis: () => void;
   generateSyntheticData: () => void;
@@ -32,10 +35,48 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
   setTimeHorizon,
   weights,
   setWeights,
+  selectedAssets,
+  setSelectedAssets,
   isCalculating,
   performRiskAnalysis,
   generateSyntheticData
 }) => {
+  const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+
+  useEffect(() => {
+    loadAvailableAssets();
+  }, []);
+
+  const loadAvailableAssets = async () => {
+    try {
+      setIsLoadingAssets(true);
+      const assets = await fetchAssets();
+      setAvailableAssets(assets);
+    } catch (error) {
+      console.error('Error loading assets:', error);
+    } finally {
+      setIsLoadingAssets(false);
+    }
+  };
+
+  const handleAssetSelection = (index: number, symbol: string) => {
+    const newSelectedAssets = [...selectedAssets];
+    newSelectedAssets[index] = symbol;
+    setSelectedAssets(newSelectedAssets);
+  };
+
+  const getAssetDisplayName = (symbol: string) => {
+    const asset = availableAssets.find(a => a.symbol === symbol);
+    return asset ? `${asset.symbol} - ${asset.name || 'Unknown'}` : symbol;
+  };
+
+  const getAvailableAssetsForSlot = (currentIndex: number) => {
+    return availableAssets.filter(asset => 
+      !selectedAssets.includes(asset.symbol) || selectedAssets[currentIndex] === asset.symbol
+    );
+  };
+
   return (
     <>
       {/* Quick Configuration */}
@@ -151,33 +192,67 @@ const PortfolioConfiguration: React.FC<PortfolioConfigurationProps> = ({
       {/* Portfolio Weights Configuration */}
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Weights</CardTitle>
+          <CardTitle>Portfolio Assets & Weights</CardTitle>
           <CardDescription>
-            Adjust the allocation across your portfolio assets
+            Select assets from your database and adjust their allocation
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {weights.map((weight, idx) => (
-            <div key={idx} className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <Label>Asset {String.fromCharCode(65 + idx)}</Label>
-                <span className="font-mono">{(weight * 100).toFixed(1)}%</span>
-              </div>
-              <Slider
-                value={[weight * 100]}
-                onValueChange={(value) => {
-                  const newWeights = [...weights];
-                  newWeights[idx] = value[0] / 100;
-                  setWeights(newWeights);
-                }}
-                min={0}
-                max={100}
-                step={1}
-                className="w-full"
-              />
-              <Progress value={weight * 100} className="h-2" />
+          {isLoadingAssets ? (
+            <div className="text-center text-muted-foreground">
+              Loading available assets...
             </div>
-          ))}
+          ) : (
+            weights.map((weight, idx) => (
+              <div key={idx} className="space-y-3 p-4 border rounded-lg">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Asset {idx + 1}</Label>
+                  <Select 
+                    value={selectedAssets[idx] || ''} 
+                    onValueChange={(value) => handleAssetSelection(idx, value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an asset..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableAssetsForSlot(idx).map((asset) => (
+                        <SelectItem key={asset.symbol} value={asset.symbol}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{asset.symbol}</span>
+                            {asset.name && (
+                              <span className="text-xs text-muted-foreground">{asset.name}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {selectedAssets[idx] && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <Label>Weight</Label>
+                      <span className="font-mono">{(weight * 100).toFixed(1)}%</span>
+                    </div>
+                    <Slider
+                      value={[weight * 100]}
+                      onValueChange={(value) => {
+                        const newWeights = [...weights];
+                        newWeights[idx] = value[0] / 100;
+                        setWeights(newWeights);
+                      }}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                    <Progress value={weight * 100} className="h-2" />
+                  </>
+                )}
+              </div>
+            ))
+          )}
           
           <div className="pt-4 border-t">
             <div className="flex justify-between text-sm font-medium">
