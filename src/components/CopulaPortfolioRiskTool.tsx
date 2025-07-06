@@ -1,4 +1,4 @@
-
+import { GlareCard } from "@/components/ui/glare-card";
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -424,7 +424,15 @@ const CopulaPortfolioRiskTool = () => {
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
-
+      {/* GlareCard Section */}
+      <GlareCard>
+        <div className="p-6">
+          <h3 className="text-2xl font-semibold">Risk Snapshot</h3>
+          <p className="text-muted-foreground mt-1">
+            Preview the simulated risk insights for your selected portfolio.
+          </p>
+        </div>
+      </GlareCard>
         {/* Configuration Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <PortfolioConfiguration
