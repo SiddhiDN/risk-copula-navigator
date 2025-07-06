@@ -95,16 +95,17 @@ export const calculateCVaR = (returns: number[], confidence: number): number => 
 export const calculateMaxDrawdown = (returns: number[]): number => {
   if (returns.length === 0) return 0;
   
-  let peak = 0;
-  let maxDD = 0;
-  let cumReturn = 0;
-  
-  for (const ret of returns) {
-    cumReturn += ret;
-    peak = Math.max(peak, cumReturn);
-    const drawdown = peak - cumReturn;
-    maxDD = Math.max(maxDD, drawdown);
-  }
+  let peak = 1;
+let maxDD = 0;
+let cumReturn = 1;
+
+for (const ret of returns) {
+  cumReturn *= (1 + ret);
+  peak = Math.max(peak, cumReturn);
+  const drawdown = 1 - cumReturn / peak;
+  maxDD = Math.max(maxDD, drawdown);
+}
+
   
   return maxDD;
 };
