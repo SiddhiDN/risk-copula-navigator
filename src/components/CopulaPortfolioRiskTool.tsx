@@ -465,6 +465,8 @@ const CopulaPortfolioRiskTool = () => {
           <DiagnosticsPanel 
             selectedAssets={selectedAssets}
             weights={weights}
+            results={results}
+            selectedCopula={selectedCopula}
           />
         </div>
 
