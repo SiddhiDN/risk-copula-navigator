@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface Asset {
@@ -25,6 +24,8 @@ export interface ProcessedReturn {
 }
 
 export const fetchAssets = async (): Promise<Asset[]> => {
+  console.log('Fetching assets from Supabase...');
+  
   const { data, error } = await supabase
     .from('assets')
     .select('*')
@@ -32,13 +33,22 @@ export const fetchAssets = async (): Promise<Asset[]> => {
   
   if (error) {
     console.error('Error fetching assets:', error);
+    console.error('Error details:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    });
     throw error;
   }
   
+  console.log('Assets fetched successfully:', data?.length || 0, 'records');
   return data || [];
 };
 
 export const fetchDailyReturns = async (symbols: string[], limit: number = 252): Promise<DailyReturn[]> => {
+  console.log('Fetching daily returns for symbols:', symbols, 'with limit:', limit);
+  
   const { data, error } = await supabase
     .from('daily_return')
     .select('*')
@@ -48,9 +58,16 @@ export const fetchDailyReturns = async (symbols: string[], limit: number = 252):
   
   if (error) {
     console.error('Error fetching daily returns:', error);
+    console.error('Error details:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    });
     throw error;
   }
   
+  console.log('Daily returns fetched successfully:', data?.length || 0, 'records');
   return data || [];
 };
 

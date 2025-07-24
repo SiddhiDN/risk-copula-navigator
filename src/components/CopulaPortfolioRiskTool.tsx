@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,16 +55,19 @@ const CopulaPortfolioRiskTool = () => {
       setIsLoading(true);
       setError(null);
       
-      console.log('Loading assets from Supabase...');
+      console.log('Starting data load from Supabase...');
+      console.log('Supabase URL:', 'https://qjprfsdducpkxeezzvst.supabase.co');
+      
       const fetchedAssets = await fetchAssets();
-      console.log('Fetched assets:', fetchedAssets);
       
       if (fetchedAssets.length === 0) {
+        console.warn('No assets found in database');
         setError('No assets found in database. Please add some assets first.');
         return;
       }
       
       setAssets(fetchedAssets);
+      console.log('Assets loaded successfully:', fetchedAssets.map(a => a.symbol));
       
       // Initialize selected assets with first 4 assets (or all if less than 4)
       const initialAssets = fetchedAssets.slice(0, 4).map(asset => asset.symbol);
@@ -74,12 +76,14 @@ const CopulaPortfolioRiskTool = () => {
       
       // Load daily returns for initial assets
       if (initialAssets.length > 0) {
+        console.log('Loading daily returns for initial assets:', initialAssets);
         await loadDailyReturnsForAssets(initialAssets);
       }
       
     } catch (err) {
       console.error('Error loading data from Supabase:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data from Supabase');
+      console.error('Error stack:', err instanceof Error ? err.stack : 'No stack trace');
+      setError(`Failed to load data: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -89,17 +93,18 @@ const CopulaPortfolioRiskTool = () => {
     try {
       console.log('Loading daily returns for symbols:', symbols);
       const dailyReturns = await fetchDailyReturns(symbols, 252);
-      console.log('Fetched daily returns:', dailyReturns.length, 'records');
       
       if (dailyReturns.length === 0) {
-        setError('No daily return data found for the selected assets.');
+        console.warn('No daily return data found for symbols:', symbols);
+        setError(`No daily return data found for the selected assets: ${symbols.join(', ')}`);
         return;
       }
       
       const { portfolioData: processedPortfolioData, returns: processedReturns } = processMarketData(dailyReturns);
-      console.log('Processed data - Portfolio:', processedPortfolioData.length, 'Returns:', processedReturns.length);
+      console.log('Data processed - Portfolio entries:', processedPortfolioData.length, 'Return entries:', processedReturns.length);
       
       if (processedReturns.length === 0) {
+        console.warn('Insufficient data to calculate returns');
         setError('Insufficient data to calculate returns. Need at least 2 days of data.');
         return;
       }
@@ -107,10 +112,12 @@ const CopulaPortfolioRiskTool = () => {
       setPortfolioData(processedPortfolioData);
       setReturns(processedReturns);
       setError(null);
+      console.log('Portfolio data loaded successfully');
       
     } catch (err) {
       console.error('Error loading daily returns:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load daily returns');
+      console.error('Error stack:', err instanceof Error ? err.stack : 'No stack trace');
+      setError(`Failed to load daily returns: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
